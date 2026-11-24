@@ -1,0 +1,5 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';
+import {phoneNorm,socialNorm,visibleLeadWhere,leadInput} from '../src/lib/crm';
+test('normalizes comparable phone and social values',()=>{assert.equal(phoneNorm('00 966 55-123 4567'),'+966551234567');assert.equal(socialNorm('https://www.instagram.com/Manzoor/'),'instagram.com/manzoor');assert.equal(socialNorm('javascript:alert(1)'),null)});
+test('employee scope is tied to team membership',()=>{assert.deepEqual(visibleLeadWhere({id:'u1',role:'COMMUNICATION'}),{team:{communicatorId:'u1'}});assert.deepEqual(visibleLeadWhere({id:'u2',role:'EXECUTION'}),{team:{executorId:'u2'}});assert.deepEqual(visibleLeadWhere({id:'u3',role:'MANAGER'}),{id:'__none__'})});
+test('lead validation rejects missing team and oversized notes',()=>{assert.equal(leadInput.safeParse({name:'عميل جديد',teamId:'',priority:'NORMAL'}).success,false);assert.equal(leadInput.safeParse({name:'عميل جديد',teamId:'t1',priority:'NORMAL',notes:'x'.repeat(3001)}).success,false)});

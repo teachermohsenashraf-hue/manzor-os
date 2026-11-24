@@ -1,0 +1,16 @@
+node_modules/
+.next/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+coverage/
+src/generated/
+backups/
+public/fonts/*.woff*
+public/fonts/*.ttf
+public/fonts/*.otf
+src/app/fonts/*.woff*
+src/app/fonts/*.ttf
+src/app/fonts/*.otf
+qa/*.jpg

@@ -1,0 +1,935 @@
+generator client {
+  provider = "prisma-client"
+  output = "../src/generated/prisma"
+}
+datasource db {
+  provider = "postgresql"
+}
+enum Role {
+  OWNER
+  MANAGER
+  COMMUNICATION
+  EXECUTION
+}
+model User {
+  id String @id @default(cuid())
+  name String
+  username String @unique
+  passwordHash String
+  role Role
+  active Boolean @default(true)
+  mustChangePassword Boolean @default(true)
+  contact String?
+  startsAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sessions Session[]
+  auditLogs AuditLog[]
+  communicationTeams Team[] @relation("CommunicationMember")
+  executionTeams Team[] @relation("ExecutionMember")
+  leadActivities ContactActivity[]
+  leadAssignments LeadAssignment[]
+  createdProjects Project[] @relation("ProjectCreator")
+  assignedProjects Project[] @relation("ProjectExecutor")
+  priceVersions PriceVersion[]
+  createdOrders CustomerOrder[] @relation("OrderCreator")
+  approvedOrders CustomerOrder[] @relation("OrderApprover")
+  orderDecisions OrderDecision[]
+  requestedChanges OrderChange[] @relation("ChangeRequester")
+  decidedChanges OrderChange[] @relation("ChangeDecider")
+  createdSubscriptions Subscription[]
+  earnings EmployeeEarning[] @relation("EarningRecipient")
+  payouts EmployeePayout[] @relation("PayoutRecipient")
+  @@index([role, active])
+}
+enum LeadStatus {
+  NEW
+  CONTACTED
+  NO_RESPONSE
+  INTERESTED
+  DEFERRED
+  QUOTE_REQUESTED
+  NEGOTIATING
+  ACCEPTED
+  DECLINED
+  CLIENT
+}
+enum LeadPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+enum ActivityKind {
+  CALL
+  MESSAGE
+  NOTE
+  STATUS
+  FOLLOW_UP
+  CONVERSION
+}
+model Team {
+  id String @id @default(cuid())
+  name String
+  active Boolean @default(true)
+  communicatorId String
+  communicator User @relation("CommunicationMember", fields: [communicatorId], references: [id], onDelete: Restrict)
+  executorId String
+  executor User @relation("ExecutionMember", fields: [executorId], references: [id], onDelete: Restrict)
+  capacityLimit Int @default(5)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  leads Lead[]
+  assignments LeadAssignment[]
+  projects Project[]
+  orders CustomerOrder[]
+  @@index([communicatorId, active])
+  @@index([executorId, active])
+}
+model Lead {
+  id String @id @default(cuid())
+  name String
+  country String?
+  city String?
+  sector String?
+  phone String?
+  phoneNorm String?
+  whatsapp String?
+  whatsappNorm String?
+  socialUrl String?
+  socialNorm String?
+  source String?
+  status LeadStatus @default(NEW)
+  priority LeadPriority @default(NORMAL)
+  notes String?
+  teamId String
+  team Team @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  lastContactAt DateTime?
+  nextFollowUpAt DateTime?
+  convertedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  activities ContactActivity[]
+  assignments LeadAssignment[]
+  client Client?
+  @@index([teamId, status, nextFollowUpAt])
+  @@index([teamId, priority, createdAt])
+  @@index([phoneNorm])
+  @@index([whatsappNorm])
+  @@index([socialNorm])
+}
+model ContactActivity {
+  id String @id @default(cuid())
+  leadId String
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  actorId String
+  actor User @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  kind ActivityKind
+  statusBefore LeadStatus?
+  statusAfter LeadStatus?
+  outcome String?
+  note String?
+  followUpAt DateTime?
+  occurredAt DateTime @default(now())
+  requestId String? @unique
+  @@index([leadId, occurredAt])
+  @@index([actorId, occurredAt])
+}
+model LeadAssignment {
+  id String @id @default(cuid())
+  leadId String
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  teamId String
+  team Team @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  actorId String
+  actor User @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  reason String?
+  assignedAt DateTime @default(now())
+  endedAt DateTime?
+  @@index([leadId, assignedAt])
+  @@index([teamId, endedAt])
+}
+model Client {
+  id String @id @default(cuid())
+  leadId String @unique
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  convertedAt DateTime @default(now())
+  projects Project[]
+  orders CustomerOrder[]
+  @@index([convertedAt])
+}
+enum ProjectStage {
+  WAITING_REQUIREMENTS
+  TREATMENT
+  WAITING_APPROVAL
+  READY
+  IN_PROGRESS
+  INTERNAL_REVIEW
+  CLIENT_PREVIEW
+  REVISIONS
+  READY_DELIVERY
+  DELIVERED
+  COMPLETED
+}
+enum ProductionAssetKind {
+  SCRIPT
+  TREATMENT
+}
+enum ApprovalKind {
+  SCRIPT
+  TREATMENT
+  PREVIEW
+  FINAL_DELIVERY
+}
+enum RevisionKind {
+  INCLUDED
+  CORRECTION
+  SCOPE_CHANGE
+  PAID_EXTRA
+}
+enum RevisionStatus {
+  OPEN
+  IN_PROGRESS
+  SUBMITTED
+  CLOSED
+}
+enum AttachmentKind {
+  REQUIREMENT
+  SCRIPT
+  PREVIEW
+  REVISION
+  FINAL
+  SOURCE
+}
+model Project {
+  id String @id @default(cuid())
+  clientId String
+  client Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  teamId String
+  team Team @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  executorId String
+  executor User @relation("ProjectExecutor", fields: [executorId], references: [id], onDelete: Restrict)
+  createdById String
+  createdBy User @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  title String
+  serviceType String
+  brief String
+  requirements String
+  notes String?
+  priority LeadPriority @default(NORMAL)
+  requirementsComplete Boolean @default(false)
+  stage ProjectStage @default(WAITING_REQUIREMENTS)
+  paused Boolean @default(false)
+  cancelledAt DateTime?
+  dueAt DateTime?
+  productionStartedAt DateTime?
+  deliveredAt DateTime?
+  completedAt DateTime?
+  orderId String?
+  order CustomerOrder? @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  orderItemId String?
+  orderItem OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  subscriptionCycleId String?
+  subscriptionCycle SubscriptionCycle? @relation(fields: [subscriptionCycleId], references: [id], onDelete: Restrict)
+  cycleItemId String?
+  cycleItem CycleItem? @relation(fields: [cycleItemId], references: [id], onDelete: Restrict)
+  earnings EmployeeEarning[]
+  expenses Expense[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  assignments ProjectAssignment[]
+  tasks ProductionTask[]
+  versions ProductionVersion[]
+  approvals Approval[]
+  revisions Revision[]
+  deliverables Deliverable[]
+  qualityReviews QualityReview[]
+  events ProductionEvent[]
+  pauses ProjectPause[]
+  attachments Attachment[]
+  @@index([teamId, stage, dueAt])
+  @@index([executorId, stage, dueAt])
+  @@index([clientId, createdAt])
+  @@index([orderItemId])
+  @@index([cycleItemId])
+}
+enum ServiceKind {
+  SINGLE
+  BUNDLE
+  SUBSCRIPTION
+}
+model Service {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  kind ServiceKind
+  productionType String
+  active Boolean @default(false)
+  description String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  components ServiceComponent[] @relation("ParentService")
+  includedIn ServiceComponent[] @relation("ChildService")
+  prices PriceVersion[]
+  orderItems OrderItem[]
+  cycleItems CycleItem[]
+  changes OrderChange[]
+}
+model ServiceComponent {
+  id String @id @default(cuid())
+  parentId String
+  parent Service @relation("ParentService", fields: [parentId], references: [id], onDelete: Restrict)
+  childId String
+  child Service @relation("ChildService", fields: [childId], references: [id], onDelete: Restrict)
+  quantity Int
+  @@unique([parentId, childId])
+}
+model PriceVersion {
+  id String @id @default(cuid())
+  serviceId String
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  marketCode String
+  currency String
+  amountMinor BigInt
+  effectiveFrom DateTime
+  effectiveTo DateTime?
+  createdById String
+  createdBy User @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  orderItems OrderItem[]
+  @@unique([serviceId, marketCode, effectiveFrom])
+  @@index([marketCode, currency, effectiveFrom])
+}
+enum OrderStatus {
+  DRAFT
+  PROPOSED
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+model CustomerOrder {
+  id String @id @default(cuid())
+  clientId String
+  client Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  teamId String
+  team Team @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  createdById String
+  createdBy User @relation("OrderCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedById String?
+  approvedBy User? @relation("OrderApprover", fields: [approvedById], references: [id], onDelete: Restrict)
+  status OrderStatus @default(DRAFT)
+  version Int @default(1)
+  marketCode String
+  currency String
+  title String
+  scope String
+  requirements String
+  dueAt DateTime?
+  agreementRef String?
+  totalMinor BigInt @default(0)
+  proposedAt DateTime?
+  approvedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items OrderItem[]
+  decisions OrderDecision[]
+  changes OrderChange[]
+  subscription Subscription?
+  projects Project[]
+  paymentClaims PaymentClaim[]
+  receipts Receipt[]
+  fxReceipts FxReceipt[]
+  earnings EmployeeEarning[]
+  developmentAllocations DevelopmentAllocation[]
+  @@index([teamId, status, createdAt])
+  @@index([clientId, createdAt])
+}
+
+enum PaymentClaimStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+model PaymentClaim {
+  id String @id @default(cuid())
+  orderId String
+  order CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  claimedMinor BigInt
+  currency String
+  proofRef String
+  note String?
+  status PaymentClaimStatus @default(PENDING)
+  submittedById String
+  decidedById String?
+  decidedAt DateTime?
+  decisionNote String?
+  createdAt DateTime @default(now())
+  receipt Receipt?
+  fxReceipt FxReceipt?
+  @@index([orderId, status, createdAt])
+}
+
+model Receipt {
+  id String @id @default(cuid())
+  orderId String
+  order CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  claimId String? @unique
+  claim PaymentClaim? @relation(fields: [claimId], references: [id], onDelete: Restrict)
+  grossMinor BigInt
+  feeMinor BigInt
+  netMinor BigInt
+  currency String
+  settlementCurrency String
+  settlementRef String @unique
+  receivedAt DateTime
+  confirmedById String
+  createdAt DateTime @default(now())
+  journal JournalEntry @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  journalId String @unique
+  @@index([orderId, receivedAt])
+}
+
+model FxReceipt {
+  id String @id @default(cuid())
+  orderId String
+  order CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  claimId String? @unique
+  claim PaymentClaim? @relation(fields: [claimId], references: [id], onDelete: Restrict)
+  paidSarMinor BigInt
+  grossEgpMinor BigInt?
+  feeEgpMinor BigInt?
+  netEgpMinor BigInt
+  rate Decimal @db.Decimal(24, 12)
+  rateBasis String
+  rateSource String
+  convertedAt DateTime
+  receivedAt DateTime
+  bankAccountRef String
+  transferRef String @unique
+  confirmedById String
+  sarJournalId String @unique
+  sarJournal JournalEntry @relation("FxSarJournal", fields: [sarJournalId], references: [id], onDelete: Restrict)
+  egpJournalId String @unique
+  egpJournal JournalEntry @relation("FxEgpJournal", fields: [egpJournalId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  @@index([orderId, receivedAt])
+}
+
+model LedgerAccount {
+  id String @id @default(cuid())
+  code String
+  currency String
+  name String
+  postings LedgerPosting[]
+  @@unique([code, currency])
+}
+
+model JournalEntry {
+  id String @id @default(cuid())
+  currency String
+  kind String
+  reference String @unique
+  description String
+  createdById String
+  createdAt DateTime @default(now())
+  postings LedgerPosting[]
+  receipt Receipt?
+  fxSarReceipts FxReceipt[] @relation("FxSarJournal")
+  fxEgpReceipts FxReceipt[] @relation("FxEgpJournal")
+  earning EmployeeEarning?
+  payout EmployeePayout?
+  developmentReservation DevelopmentAllocation? @relation("DevelopmentReservation")
+  developmentFunding DevelopmentAllocation? @relation("DevelopmentFunding")
+  expenseAccrual Expense? @relation("ExpenseAccrual")
+  expensePayment Expense? @relation("ExpensePayment")
+}
+
+enum EarningKind {
+  COMMUNICATION
+  EXECUTION
+}
+
+enum EarningStatus {
+  PENDING
+  EARNED
+  PAYABLE
+  PAID
+  ADJUSTED
+}
+
+model EmployeeEarning {
+  id String @id @default(cuid())
+  entitlementKey String @unique
+  kind EarningKind
+  status EarningStatus @default(PENDING)
+  recipientId String
+  recipient User @relation("EarningRecipient", fields: [recipientId], references: [id], onDelete: Restrict)
+  orderId String
+  order CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  projectId String?
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  assignmentId String?
+  assignment ProjectAssignment? @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  amountMinor BigInt
+  currency String @default("EGP")
+  policyCode String
+  policyVersion Int
+  basisRef String
+  note String?
+  proposedById String
+  approvedById String?
+  earnedAt DateTime?
+  payableAt DateTime?
+  journalId String? @unique
+  journal JournalEntry? @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  payoutLines PayoutLine[]
+  @@index([recipientId, status, createdAt])
+  @@index([orderId, kind])
+  @@index([projectId, kind])
+}
+
+enum PayoutStatus {
+  APPROVED
+  EXECUTED
+  CONFIRMED
+  CANCELLED
+}
+
+model EmployeePayout {
+  id String @id @default(cuid())
+  recipientId String
+  recipient User @relation("PayoutRecipient", fields: [recipientId], references: [id], onDelete: Restrict)
+  amountMinor BigInt
+  currency String @default("EGP")
+  status PayoutStatus @default(APPROVED)
+  approvedById String
+  approvedAt DateTime @default(now())
+  executedById String?
+  executedAt DateTime?
+  confirmedById String?
+  confirmedAt DateTime?
+  transferRef String? @unique
+  confirmationRef String? @unique
+  accountRef String?
+  note String?
+  journalId String? @unique
+  journal JournalEntry? @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  lines PayoutLine[]
+  @@index([recipientId, status, approvedAt])
+}
+
+model PayoutLine {
+  id String @id @default(cuid())
+  payoutId String
+  payout EmployeePayout @relation(fields: [payoutId], references: [id], onDelete: Restrict)
+  earningId String
+  earning EmployeeEarning @relation(fields: [earningId], references: [id], onDelete: Restrict)
+  amountMinor BigInt
+  @@unique([payoutId, earningId])
+  @@index([earningId])
+}
+
+enum DevelopmentStatus {
+  RESERVED
+  FUNDED
+}
+
+model DevelopmentAllocation {
+  id String @id @default(cuid())
+  orderId String
+  order CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  orderItemId String @unique
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  amountMinor BigInt
+  currency String @default("EGP")
+  policyCode String
+  policyVersion Int
+  status DevelopmentStatus @default(RESERVED)
+  approvedById String
+  approvedAt DateTime @default(now())
+  reservationJournalId String @unique
+  reservationJournal JournalEntry @relation("DevelopmentReservation", fields: [reservationJournalId], references: [id], onDelete: Restrict)
+  fundingJournalId String? @unique
+  fundingJournal JournalEntry? @relation("DevelopmentFunding", fields: [fundingJournalId], references: [id], onDelete: Restrict)
+  fundedAt DateTime?
+  expenses Expense[]
+  @@index([orderId, status])
+}
+
+enum ExpenseCategory {
+  PROJECT_DIRECT
+  GENERAL
+  SOFTWARE
+  AI_TOOLS
+  HOSTING
+  BANK_FEES
+  DEVELOPMENT
+  EXCEPTIONAL
+}
+
+enum ExpenseStatus {
+  DRAFT
+  APPROVED
+  PAID
+  CANCELLED
+}
+
+model Expense {
+  id String @id @default(cuid())
+  category ExpenseCategory
+  status ExpenseStatus @default(DRAFT)
+  description String
+  amountMinor BigInt
+  currency String
+  dueAt DateTime?
+  paidAt DateTime?
+  projectId String?
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  developmentAllocationId String?
+  developmentAllocation DevelopmentAllocation? @relation(fields: [developmentAllocationId], references: [id], onDelete: Restrict)
+  proofRef String?
+  paymentRef String? @unique
+  createdById String
+  approvedById String?
+  approvedAt DateTime?
+  paidById String?
+  accrualJournalId String? @unique
+  accrualJournal JournalEntry? @relation("ExpenseAccrual", fields: [accrualJournalId], references: [id], onDelete: Restrict)
+  paymentJournalId String? @unique
+  paymentJournal JournalEntry? @relation("ExpensePayment", fields: [paymentJournalId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  @@index([status, dueAt])
+  @@index([projectId, category])
+}
+
+model LedgerPosting {
+  id String @id @default(cuid())
+  journalId String
+  journal JournalEntry @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  accountId String
+  account LedgerAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  debitMinor BigInt @default(0)
+  creditMinor BigInt @default(0)
+  createdAt DateTime @default(now())
+  @@index([journalId])
+  @@index([accountId, createdAt])
+}
+
+model FinancialRule {
+  id String @id @default(cuid())
+  code String
+  version Int
+  status String
+  source String
+  marketCode String?
+  effectiveFrom DateTime?
+  effectiveTo DateTime?
+  detail Json
+  approvedById String?
+  createdAt DateTime @default(now())
+  @@unique([code, version])
+}
+model OrderItem {
+  id String @id @default(cuid())
+  orderId String
+  order CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  serviceId String
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  priceVersionId String
+  priceVersion PriceVersion @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
+  serviceNameSnapshot String
+  serviceKindSnapshot ServiceKind
+  productionTypeSnapshot String
+  componentSnapshot Json
+  quantity Int
+  assignedQuantity Int @default(0)
+  unitMinor BigInt
+  currency String
+  scope String
+  dueAt DateTime?
+  createdAt DateTime @default(now())
+  projects Project[]
+  cycleItems CycleItem[]
+  developmentAllocation DevelopmentAllocation?
+  changes OrderChange[]
+  appliedChanges OrderChange[] @relation("AppliedChangeItem")
+  @@index([orderId, serviceId])
+}
+enum OrderDecisionKind {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+model OrderDecision {
+  id String @id @default(cuid())
+  orderId String
+  order CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  kind OrderDecisionKind
+  actorId String
+  actor User @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  note String?
+  reference String?
+  orderVersion Int
+  createdAt DateTime @default(now())
+  @@index([orderId, createdAt])
+}
+enum OrderChangeKind {
+  SCOPE
+  ADD_SERVICE
+  ADD_QUANTITY
+}
+enum OrderChangeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+model OrderChange {
+  id String @id @default(cuid())
+  orderId String
+  order CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  orderItemId String?
+  orderItem OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  appliedItemId String?
+  appliedItem OrderItem? @relation("AppliedChangeItem", fields: [appliedItemId], references: [id], onDelete: Restrict)
+  serviceId String?
+  service Service? @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  kind OrderChangeKind
+  status OrderChangeStatus @default(PENDING)
+  description String
+  quantityDelta Int?
+  proposedScope String?
+  priceImpactMinor BigInt?
+  deadlineImpactAt DateTime?
+  requestedById String
+  requestedBy User @relation("ChangeRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  decidedById String?
+  decidedBy User? @relation("ChangeDecider", fields: [decidedById], references: [id], onDelete: Restrict)
+  decisionRef String?
+  decisionNote String?
+  decidedAt DateTime?
+  createdAt DateTime @default(now())
+  revisions Revision[]
+  @@index([orderId, status, createdAt])
+}
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  PAUSED
+  ENDED
+}
+model Subscription {
+  id String @id @default(cuid())
+  orderId String @unique
+  order CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  status SubscriptionStatus @default(PENDING)
+  startsAt DateTime
+  endsAt DateTime
+  cycleDays Int
+  renewalOfId String?
+  renewalOf Subscription? @relation("SubscriptionRenewal", fields: [renewalOfId], references: [id], onDelete: Restrict)
+  renewals Subscription[] @relation("SubscriptionRenewal")
+  createdById String
+  createdBy User @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  cycles SubscriptionCycle[]
+  @@index([status, endsAt])
+}
+enum CycleStatus {
+  PLANNED
+  ACTIVE
+  CLOSED
+  CANCELLED
+}
+model SubscriptionCycle {
+  id String @id @default(cuid())
+  subscriptionId String
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  number Int
+  startsAt DateTime
+  endsAt DateTime
+  status CycleStatus @default(PLANNED)
+  deliveryPlan String?
+  createdAt DateTime @default(now())
+  items CycleItem[]
+  projects Project[]
+  @@unique([subscriptionId, number])
+}
+model CycleItem {
+  id String @id @default(cuid())
+  cycleId String
+  cycle SubscriptionCycle @relation(fields: [cycleId], references: [id], onDelete: Restrict)
+  orderItemId String
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  serviceId String
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  plannedQuantity Int
+  assignedQuantity Int @default(0)
+  deliveryPlan String?
+  projects Project[]
+  @@unique([cycleId, serviceId])
+}
+model ProjectAssignment {
+  id String @id @default(cuid())
+  projectId String
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  executorId String
+  actorId String
+  reason String?
+  assignedAt DateTime @default(now())
+  acceptedAt DateTime?
+  endedAt DateTime?
+  earnings EmployeeEarning[]
+  @@index([projectId, assignedAt])
+  @@index([executorId, endedAt])
+}
+model ProductionTask {
+  id String @id @default(cuid())
+  projectId String
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  title String
+  doneAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([projectId, doneAt])
+}
+model ProductionVersion {
+  id String @id @default(cuid())
+  projectId String
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  kind ProductionAssetKind
+  number Int
+  content String
+  reviewNotes String?
+  createdById String
+  createdAt DateTime @default(now())
+  @@unique([projectId, kind, number])
+}
+model Approval {
+  id String @id @default(cuid())
+  projectId String
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  kind ApprovalKind
+  versionId String?
+  deliverableId String?
+  reference String?
+  note String?
+  approvedById String
+  approvedAt DateTime
+  recordedAt DateTime @default(now())
+  @@index([projectId, kind, approvedAt])
+}
+model Revision {
+  id String @id @default(cuid())
+  projectId String
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  number Int
+  kind RevisionKind
+  source String
+  notes String
+  executorId String
+  dueAt DateTime?
+  status RevisionStatus @default(OPEN)
+  outputVersionId String?
+  orderChangeId String?
+  orderChange OrderChange? @relation(fields: [orderChangeId], references: [id], onDelete: Restrict)
+  requestedAt DateTime @default(now())
+  closedAt DateTime?
+  @@unique([projectId, number])
+  @@index([orderChangeId])
+}
+model Deliverable {
+  id String @id @default(cuid())
+  projectId String
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  version Int
+  title String
+  note String?
+  submittedById String
+  submittedAt DateTime @default(now())
+  deliveredAt DateTime?
+  @@unique([projectId, version])
+}
+model QualityReview {
+  id String @id @default(cuid())
+  projectId String
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  deliverableId String
+  reviewerId String
+  checklist Json
+  errors String?
+  passed Boolean
+  createdAt DateTime @default(now())
+  @@index([projectId, createdAt])
+}
+model ProductionEvent {
+  id String @id @default(cuid())
+  projectId String
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  kind String
+  actorId String
+  detail Json
+  occurredAt DateTime @default(now())
+  requestId String? @unique
+  @@index([projectId, occurredAt])
+}
+model ProjectPause {
+  id String @id @default(cuid())
+  projectId String
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  reason String
+  justified Boolean
+  startedById String
+  startedAt DateTime @default(now())
+  endedById String?
+  endedAt DateTime?
+  @@index([projectId, endedAt])
+}
+model Attachment {
+  id String @id @default(cuid())
+  projectId String
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  kind AttachmentKind
+  storageKey String @unique
+  fileName String
+  mimeType String
+  sizeBytes Int
+  uploadedById String
+  createdAt DateTime @default(now())
+  @@index([projectId, kind])
+}
+model MutationRequest {
+  id String @id
+  actorId String
+  action String
+  payloadHash String
+  result Json
+  createdAt DateTime @default(now())
+  @@index([actorId, createdAt])
+}
+model Session {
+  tokenHash String @id
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  @@index([userId])
+  @@index([expiresAt])
+}
+model LoginThrottle {
+  key String @id
+  count Int @default(0)
+  windowEnd DateTime
+}
+model AuditLog {
+  id String @id @default(cuid())
+  actorId String?
+  actor User? @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  action String
+  subjectId String?
+  detail Json
+  createdAt DateTime @default(now())
+  @@index([createdAt])
+  @@index([subjectId, createdAt])
+}
