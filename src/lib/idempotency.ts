@@ -13,7 +13,7 @@ export async function runOnce<T extends { id: string }>(input: {
   const payloadHash = createHash('sha256').update(JSON.stringify(input.payload)).digest('hex');
   return db.$transaction(async tx => {
     // Serializes retries of the same key, including requests arriving concurrently
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.requestId}, 0))`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.requestId}, 0))`;
     const old = await tx.mutationRequest.findUnique({ where: { id: input.requestId } });
     if (old) {
       if (old.actorId !== input.actorId || old.action !== input.action || old.payloadHash !== payloadHash) throw new RequestConflict('استُخدم معرف الطلب مع بيانات مختلفة');

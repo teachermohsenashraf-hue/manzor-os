@@ -15,7 +15,7 @@ const fail=(e:unknown):ActionState=>({error:e instanceof ExpenseError||e instanc
 const refresh=()=>{revalidatePath('/finance');revalidatePath('/finance/expenses')};
 const categories:ExpenseCategory[]=['PROJECT_DIRECT','GENERAL','SOFTWARE','AI_TOOLS','HOSTING','BANK_FEES','DEVELOPMENT','EXCEPTIONAL'];
 const policies:ApprovedService[]=['EG_POSTER','EG_MOTION','EG_VIDEO_3_POSTERS','SA_POSTER','SA_MOTION','SA_VIDEO_POSTER','SA_SUBSCRIPTION'];
-async function lock(tx:Tx,key:string){await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key},0))`}
+async function lock(tx:Tx,key:string){await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key},0))`}
 async function account(tx:Tx,code:string,currency:string,name:string){return tx.ledgerAccount.upsert({where:{code_currency:{code,currency}},create:{code,currency,name},update:{}})}
 async function cashAvailable(tx:Tx,accountId:string){const totals=await tx.ledgerPosting.aggregate({where:{accountId},_sum:{debitMinor:true,creditMinor:true}});return(totals._sum.debitMinor??0n)-(totals._sum.creditMinor??0n)}
 

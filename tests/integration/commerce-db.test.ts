@@ -1,18 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { requireTestDatabaseUrl } from './test-db';
 
-const url=process.env.TEST_DATABASE_URL;
-if(!url||!/test/i.test(new URL(url).pathname))throw new Error('TEST_DATABASE_URL يجب أن يشير إلى قاعدة اختبار منفصلة');
-process.env.DATABASE_URL=url;
+const {schema}=requireTestDatabaseUrl();
 const {db}=await import('../../src/lib/db');
 
 test('commerce tables have RLS and quota constraints',async()=>{
-  const tables=await db.$queryRaw<{tablename:string;rowsecurity:boolean}[]>`SELECT tablename,rowsecurity FROM pg_tables WHERE schemaname='public' AND tablename IN ('Service','PriceVersion','CustomerOrder','OrderItem','OrderChange','Subscription','SubscriptionCycle','CycleItem')`;
+  const tables=await db.$queryRaw<{tablename:string;rowsecurity:boolean}[]>`SELECT tablename,rowsecurity FROM pg_tables WHERE schemaname=${schema} AND tablename IN ('Service','PriceVersion','CustomerOrder','OrderItem','OrderChange','Subscription','SubscriptionCycle','CycleItem')`;
   assert.equal(tables.length,8);assert.ok(tables.every(t=>t.rowsecurity));
-  const constraints=await db.$queryRaw<{conname:string}[]>`SELECT conname FROM pg_constraint WHERE conname IN ('order_item_positive','cycle_item_positive','price_version_valid')`;
+  const constraints=await db.$queryRaw<{conname:string}[]>`SELECT c.conname FROM pg_constraint c JOIN pg_namespace n ON n.oid=c.connamespace WHERE n.nspname=${schema} AND c.conname IN ('order_item_positive','cycle_item_positive','price_version_valid')`;
   assert.equal(constraints.length,3);
-  const indexes=await db.$queryRaw<{indexname:string}[]>`SELECT indexname FROM pg_indexes WHERE schemaname='public' AND indexname='price_one_open_version'`;
+  const indexes=await db.$queryRaw<{indexname:string}[]>`SELECT indexname FROM pg_indexes WHERE schemaname=${schema} AND indexname='price_one_open_version'`;
   assert.equal(indexes.length,1);
 });
 

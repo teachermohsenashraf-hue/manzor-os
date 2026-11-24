@@ -23,8 +23,8 @@ async function orderFor(tx:Tx,id:string,actor:{id:string;role:Role}){
   return order;
 }
 async function audit(tx:Tx,actorId:string,action:string,subjectId:string,detail:Prisma.InputJsonValue){await tx.auditLog.create({data:{actorId,action,subjectId,detail}})}
-async function lockOrder(tx:Tx,id:string){await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'ORDER:'+id},0))`}
-async function lockPrice(tx:Tx,serviceId:string,marketCode:string){await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'PRICE:'+serviceId+':'+marketCode},0))`}
+async function lockOrder(tx:Tx,id:string){await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'ORDER:'+id},0))`}
+async function lockPrice(tx:Tx,serviceId:string,marketCode:string){await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'PRICE:'+serviceId+':'+marketCode},0))`}
 async function currentPrice(tx:Tx,serviceId:string,marketCode:string,at=new Date()){
   return tx.priceVersion.findFirst({where:{serviceId,marketCode,effectiveFrom:{lte:at},OR:[{effectiveTo:null},{effectiveTo:{gt:at}}]},orderBy:{effectiveFrom:'desc'}});
 }

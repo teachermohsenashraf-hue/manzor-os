@@ -13,7 +13,7 @@ const amount = (raw: string) => /^\d{1,15}$/.test(raw) ? BigInt(raw) : null;
 const fail = (error: unknown): ActionState => ({ error: error instanceof EarningError || error instanceof RequestConflict || error instanceof InvalidRequestId ? error.message : 'تعذر حفظ المستحق أو الصرف' });
 const refresh = () => { revalidatePath('/finance'); revalidatePath('/finance/earnings'); };
 const serviceTypes: ApprovedService[] = ['EG_POSTER','EG_MOTION','EG_VIDEO_3_POSTERS','SA_POSTER','SA_MOTION','SA_VIDEO_POSTER','SA_SUBSCRIPTION'];
-async function lock(tx: Tx, key: string) { await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`; }
+async function lock(tx: Tx, key: string) { await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`; }
 async function account(tx: Tx, code: string, name: string) { return tx.ledgerAccount.upsert({ where: { code_currency: { code, currency: 'EGP' } }, create: { code, currency: 'EGP', name }, update: {} }); }
 
 export async function proposeEarning(_: ActionState, form: FormData): Promise<ActionState> {

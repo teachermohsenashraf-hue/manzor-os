@@ -10,7 +10,7 @@ class FinanceError extends Error {}
 const field = (form: FormData, name: string) => String(form.get(name) ?? '').trim();
 const money = (raw: string) => /^\d{1,15}$/.test(raw) ? BigInt(raw) : null;
 const failure = (error: unknown): ActionState => ({ error: error instanceof FinanceError || error instanceof RequestConflict || error instanceof InvalidRequestId ? error.message : 'تعذر حفظ العملية المالية' });
-async function lockOrder(tx: Tx, id: string) { await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'FINANCE_ORDER:' + id}, 0))`; }
+async function lockOrder(tx: Tx, id: string) { await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'FINANCE_ORDER:' + id}, 0))`; }
 async function account(tx: Tx, code: string, currency: string, name: string) {
   return tx.ledgerAccount.upsert({ where: { code_currency: { code, currency } }, create: { code, currency, name }, update: {} });
 }
@@ -145,7 +145,7 @@ export async function activatePaidSubscription(_: ActionState, form: FormData): 
       if (order.marketCode !== 'SA' || order.currency !== 'SAR' || order.totalMinor <= 0n) throw new FinanceError('يلزم اشتراك سعودي معتمد بالريال بقيمة موجبة');
       const subscription = await tx.subscription.findUnique({ where: { orderId }, include: { cycles: true } });
       if (!subscription || subscription.status !== 'PENDING' || subscription.cycles.length !== 1 || subscription.cycles[0].status !== 'PLANNED') throw new FinanceError('الدورة ليست بانتظار التفعيل');
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'ACTIVE_SUBSCRIPTIONS:' + order.team.executorId}, 0))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'ACTIVE_SUBSCRIPTIONS:' + order.team.executorId}, 0))`;
       const activeForExecutor = await tx.subscription.count({ where: { status: 'ACTIVE', order: { team: { executorId: order.team.executorId } } } });
       if (activeForExecutor >= 5) throw new FinanceError('بلغ المنفذ حد خمسة اشتراكات نشطة، يلزم استثناء إداري موثق');
       if (await confirmedOrderPaidMinor(tx, orderId) !== order.totalMinor) throw new FinanceError('لا يُفعّل الاشتراك قبل اعتماد تحصيل القيمة كاملة');
