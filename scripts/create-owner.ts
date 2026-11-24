@@ -1,13 +1,12 @@
 import 'dotenv/config';
-import { randomBytes } from 'node:crypto';
 import { db } from '../src/lib/db';
-import { hashPassword } from '../src/lib/password';
+import { generateTemporaryPassword, hashPassword } from '../src/lib/password';
 import { usernameSchema } from '../src/lib/validation';
 async function main(){
   const username=usernameSchema.parse(process.env.OWNER_USERNAME);
   const name=process.env.OWNER_NAME?.trim();
   if(!name||name.length<2) throw new Error('Set OWNER_NAME and OWNER_USERNAME in this shell session.');
-  const password=randomBytes(24).toString('base64url');
+  const password=generateTemporaryPassword();
   const passwordHash=await hashPassword(password);
   await db.$transaction(async tx=>{
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(94720517)`;

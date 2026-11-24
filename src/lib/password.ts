@@ -1,4 +1,8 @@
-import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomInt, scrypt, timingSafeEqual } from 'node:crypto';
+const temporaryAlphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+export function generateTemporaryPassword() {
+  return Array.from({ length: 8 }, () => temporaryAlphabet[randomInt(temporaryAlphabet.length)]).join('');
+}
 const derive = (password: string, salt: string) => new Promise<Buffer>((resolve, reject) => {
   scrypt(password, salt, 64, { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }, (error, key) => error ? reject(error) : resolve(key));
 });
