@@ -3,13 +3,34 @@ import { notFound } from 'next/navigation';
 import { db } from '@/lib/db';
 import { requireUser } from '@/lib/auth';
 import { formatMinor, orderStatusLabels } from '@/lib/commerce';
-import { createOrder } from '@/app/commerce-actions';
-import { ProductionForm } from '@/components/production-form';
+import { OperationalOrderForm } from '@/components/operational-order-form';
+import { nextOrderStep } from '@/lib/operational-next-step';
+import { validSaudiSubscriptionOffer } from '@/lib/saudi-subscription-offer';
 import type { OrderStatus, Prisma } from '@/generated/prisma/client';
 
-export default async function Orders({searchParams}:{searchParams:Promise<{status?:string;team?:string}>}){
-  const user=await requireUser();if(!['OWNER','COMMUNICATION'].includes(user.role))notFound();const f=await searchParams;
-  const where:Prisma.CustomerOrderWhereInput={...(user.role==='COMMUNICATION'?{team:{communicatorId:user.id},client:{lead:{team:{communicatorId:user.id}}}}:{}),...(f.status&&f.status in orderStatusLabels?{status:f.status as OrderStatus}:{}),...(f.team?{teamId:f.team}:{})};
-  const [orders,teams,clients]=await Promise.all([db.customerOrder.findMany({where,include:{client:{include:{lead:{select:{name:true}}}},team:{select:{name:true}},_count:{select:{items:true}}},orderBy:{createdAt:'desc'},take:200}),db.team.findMany({where:user.role==='OWNER'?{}:{communicatorId:user.id},select:{id:true,name:true},orderBy:{name:'asc'}}),db.client.findMany({where:user.role==='OWNER'?{}:{lead:{team:{communicatorId:user.id}}},include:{lead:{select:{name:true}}},take:200})]);
-  return <><div className="page-heading"><div><span className="eyebrow">التجارة</span><h1>طلبات العملاء</h1><p className="muted">كل اتفاق يحتفظ بسعره ونطاقه وقت الاعتماد</p></div></div><form className="search-form crm-filters" action="/orders"><label>الحالة<select name="status" defaultValue={f.status??''}><option value="">الكل</option>{Object.entries(orderStatusLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label><label>الفريق<select name="team" defaultValue={f.team??''}><option value="">الكل</option>{teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label><button>تطبيق</button></form><div className="dashboard-grid"><section className="card"><h2>قائمة الطلبات</h2>{orders.length?orders.map(o=><div className="setting-row" key={o.id}><Link href={`/orders/${o.id}`}><strong>{o.title}</strong></Link><p>{o.client.lead.name} · {o.team.name} · {o.marketCode}</p><small>{orderStatusLabels[o.status]} · {o._count.items} بند · {o.status==='APPROVED'?formatMinor(o.totalMinor,o.currency):'لم يعتمد السعر بعد'}</small></div>):<p className="empty">لا توجد طلبات</p>}</section><aside className="card"><h2>طلب جديد</h2><ProductionForm action={createOrder} label="إنشاء مسودة"><label>اسم الطلب<input name="title" required/></label><label>العميل<select name="clientId" required><option value="">اختر</option>{clients.map(c=><option key={c.id} value={c.id}>{c.lead.name}</option>)}</select></label><label>الفريق<select name="teamId" required><option value="">اختر</option>{teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label><div className="form-two"><label>السوق<input name="marketCode" dir="ltr" placeholder="EG أو SA" maxLength={2} required/></label><label>العملة<input name="currency" dir="ltr" placeholder="EGP أو SAR" maxLength={3} required/></label></div><label>نطاق العمل<textarea name="scope" required rows={3}/></label><label>المتطلبات<textarea name="requirements" required rows={3}/></label><label>الموعد<input type="datetime-local" name="dueAt"/></label><label>مرجع الاتفاق إن توفر<input name="agreementRef"/></label></ProductionForm></aside></div></>;
+export default async function Orders({ searchParams }: { searchParams: Promise<{ status?: string; team?: string }> }) {
+  const user = await requireUser();
+  if (!['OWNER', 'COMMUNICATION'].includes(user.role)) notFound();
+  const f = await searchParams;
+  const where: Prisma.CustomerOrderWhereInput = {
+    ...(user.role === 'COMMUNICATION' ? { team: { communicatorId: user.id }, client: { lead: { team: { communicatorId: user.id } } } } : {}),
+    ...(f.status && f.status in orderStatusLabels ? { status: f.status as OrderStatus } : {}),
+    ...(f.team ? { teamId: f.team } : {}),
+  };
+  const now = new Date();
+  const [orders, teams, clients, prices] = await Promise.all([
+    db.customerOrder.findMany({ where, include: { client: { include: { lead: { select: { name: true } } } }, team: { select: { name: true } }, items: { select: { id: true, serviceKindSnapshot: true } }, receipts: { select: { grossMinor: true } }, fxReceipts: { select: { paidSarMinor: true } }, subscription: { select: { status: true } }, projects: { select: { id: true, stage: true } } }, orderBy: { createdAt: 'desc' }, take: 200 }),
+    db.team.findMany({ where: { active: true, ...(user.role === 'OWNER' ? {} : { communicatorId: user.id }) }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
+    db.client.findMany({ where: user.role === 'OWNER' ? {} : { lead: { team: { communicatorId: user.id } } }, include: { lead: { select: { name: true } } }, take: 200 }),
+    db.priceVersion.findMany({ where: { effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }], service: { active: true } }, include: { service: { include: { components: { include: { child: true } } } } }, orderBy: { service: { name: 'asc' } } }),
+  ]);
+  const offers = prices.filter(price => price.service.kind === 'SINGLE' || price.service.components.length > 0).filter(price => price.service.kind !== 'SUBSCRIPTION' || validSaudiSubscriptionOffer(price, price.service.components)).map(price => ({ id: price.id, name: price.service.name, kind: price.service.kind, amountMinor: price.amountMinor, marketCode: price.marketCode, currency: price.currency }));
+  return <>
+    <div className="page-heading"><div><span className="eyebrow">طلبات العملاء</span><h1>الطلبات</h1><p className="muted">سجل العميل والخدمة والطلب من هنا، ثم تابع الخطوة التالية من القائمة</p></div></div>
+    <form className="search-form crm-filters" action="/orders"><label>الحالة<select name="status" defaultValue={f.status ?? ''}><option value="">الكل</option>{Object.entries(orderStatusLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><label>الفريق<select name="team" defaultValue={f.team ?? ''}><option value="">الكل</option>{teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label><button>تطبيق</button></form>
+    <div className="dashboard-grid"><section className="card"><h2>قائمة الطلبات</h2>{orders.length ? orders.map(order => {
+      const collected = order.receipts.reduce((sum, receipt) => sum + receipt.grossMinor, 0n) + order.fxReceipts.reduce((sum, receipt) => sum + receipt.paidSarMinor, 0n);
+      return <div className="setting-row" key={order.id}><Link href={`/orders/${order.id}`}><strong>{order.title}</strong></Link><p>{order.client.lead.name} · {order.team.name}</p><small>{orderStatusLabels[order.status]} · {order.status === 'APPROVED' ? formatMinor(order.totalMinor, order.currency) : 'بانتظار اعتماد السعر'}</small><p><strong>الخطوة التالية</strong> {nextOrderStep(order, collected, user.role)}</p></div>;
+    }) : <p className="empty">لا توجد طلبات</p>}</section><aside className="card"><h2>عميل وطلب جديد</h2><OperationalOrderForm clients={clients.map(client => ({ id: client.id, name: client.lead.name }))} teams={teams} offers={offers} /></aside></div>
+  </>;
 }

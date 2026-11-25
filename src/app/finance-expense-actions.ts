@@ -67,7 +67,7 @@ export async function fundDevelopment(_:ActionState,form:FormData):Promise<Actio
 
 export async function createExpense(_:ActionState,form:FormData):Promise<ActionState>{
   const category=f(form,'category') as ExpenseCategory,description=f(form,'description'),amountMinor=money(f(form,'amountMinor')),currency=f(form,'currency').toUpperCase(),projectId=f(form,'projectId'),developmentAllocationId=f(form,'developmentAllocationId'),proofRef=f(form,'proofRef'),dueRaw=f(form,'dueAt'),dueAt=dueRaw?new Date(dueRaw):null;
-  if(!categories.includes(category)||description.length<3||description.length>2000||!amountMinor||amountMinor<=0n||!['EGP','SAR'].includes(currency)||dueAt&&Number.isNaN(dueAt.getTime())||proofRef.length>500)return{error:'راجع وصف المصروف ومبلغه وفئته'};
+  if(!categories.includes(category)||description.length<3||description.length>2000||!amountMinor||amountMinor<=0n||!['EGP','SAR'].includes(currency)||dueAt&&Number.isNaN(dueAt.getTime())||proofRef.length>500||category!=='DEVELOPMENT'&&proofRef.length<3)return{error:'راجع وصف المصروف ومبلغه وفئته ومرجع الإثبات'};
   const actor=await requireUser();
   try{await runOnce({requestId:f(form,'requestId'),actorId:actor.id,action:'EXPENSE_CREATE',payload:{category,description,amountMinor:String(amountMinor),currency,projectId,developmentAllocationId,proofRef,dueAt:dueAt?.toISOString()??null},execute:async tx=>{
     if(actor.role!=='OWNER')throw new ExpenseError('المالك فقط يسجل المصروفات');

@@ -12,6 +12,8 @@ const paths = [
   'tests/integration/commerce-db.test.ts',
   'tests/integration/finance-db.test.ts',
   'tests/integration/production-db.test.ts',
+  'tests/integration/revenue-db.test.ts',
+  'tests/integration/refund-db.test.ts',
 ];
 const child = spawn(process.execPath, ['--import', 'tsx', '--test', ...paths], { env, stdio: 'inherit' });
 child.on('error', error => { console.error(error.message); process.exitCode = 1; });

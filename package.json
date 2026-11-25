@@ -11,7 +11,7 @@
   },
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",
-    "build": "prisma generate && next build",
+    "build": "tsx scripts/check-preview-env.ts && prisma generate && next build",
     "start": "next start --hostname 127.0.0.1",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
@@ -19,11 +19,15 @@
     "test:integration": "node scripts/run-integration-tests.mjs",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
+    "preview:check": "tsx scripts/check-preview-env.ts --required",
+    "preview:migrate": "tsx scripts/migrate-preview.ts",
+    "preview:storage": "tsx scripts/ensure-preview-storage.ts",
     "owner:create": "tsx scripts/create-owner.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
+    "@supabase/supabase-js": "^2.119.2",
     "dotenv": "^17.0.0",
     "lucide-react": "^0.468.0",
     "next": "^16.0.0",

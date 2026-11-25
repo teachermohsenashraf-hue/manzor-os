@@ -7,6 +7,7 @@ import { db } from '@/lib/db';
 import { cookieName, createSession, digest, requirePermission, requireUser } from '@/lib/auth';
 import { hashPassword, verifyPassword } from '@/lib/password';
 import { passwordSchema, userSchema, usernameSchema } from '@/lib/validation';
+import { consumeLoginThrottle } from '@/lib/login-throttle';
 
 export type ActionState = { error?: string; success?: string };
 async function verifyOrigin() {
@@ -22,16 +23,8 @@ export async function login(_: ActionState, form: FormData): Promise<ActionState
   // Account throttle is DB-backed and atomic. Never trust forwarded IP headers by default.
   const key = digest(parsed.data);
   let allowed: boolean;
-  try {
-    const rows = await db.$queryRaw<{ count: number }[]>`
-      INSERT INTO "LoginThrottle" ("key", "count", "windowEnd")
-      VALUES (${key}, 1, NOW() + INTERVAL '15 minutes')
-      ON CONFLICT ("key") DO UPDATE SET
-      "count" = CASE WHEN "LoginThrottle"."windowEnd" < NOW() THEN 1 ELSE "LoginThrottle"."count" + 1 END,
-      "windowEnd" = CASE WHEN "LoginThrottle"."windowEnd" < NOW() THEN NOW() + INTERVAL '15 minutes' ELSE "LoginThrottle"."windowEnd" END
-      RETURNING "count"`;
-    allowed = rows[0].count <= 8;
-  } catch { return { error: 'تعذر الاتصال بقاعدة البيانات راجع إعداد الخادم' }; }
+  try { allowed = await consumeLoginThrottle(key); }
+  catch { return { error: 'تعذر الاتصال بقاعدة البيانات راجع إعداد الخادم' }; }
   if (!allowed) return { error: 'محاولات كثيرة حاول بعد 15 دقيقة' };
   const user = await db.user.findUnique({ where: { username: parsed.data } });
   const dummy = 'scrypt-v1:' + '0'.repeat(64) + ':' + '0'.repeat(128);

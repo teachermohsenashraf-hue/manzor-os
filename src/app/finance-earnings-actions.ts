@@ -17,12 +17,12 @@ async function lock(tx: Tx, key: string) { await tx.$executeRaw`SELECT pg_adviso
 async function account(tx: Tx, code: string, name: string) { return tx.ledgerAccount.upsert({ where: { code_currency: { code, currency: 'EGP' } }, create: { code, currency: 'EGP', name }, update: {} }); }
 
 export async function proposeEarning(_: ActionState, form: FormData): Promise<ActionState> {
-  const kind = f(form,'kind'), service = f(form,'service') as ApprovedService, orderId = f(form,'orderId'), projectId = f(form,'projectId'), assignmentId = f(form,'assignmentId'), recipientId = f(form,'recipientId'), basisRef = f(form,'basisRef'), note = f(form,'note');
+  const kind = f(form,'kind'), service = f(form,'service') as ApprovedService, orderId = f(form,'orderId'), projectId = f(form,'projectId'), assignmentId = f(form,'assignmentId'), cycleId = f(form,'cycleId'), recipientId = f(form,'recipientId'), basisRef = f(form,'basisRef'), note = f(form,'note');
   const proposedMinor = amount(f(form,'amountMinor'));
   if (!['COMMUNICATION','EXECUTION'].includes(kind) || !serviceTypes.includes(service) || !proposedMinor || proposedMinor <= 0n || basisRef.length < 3 || basisRef.length > 500 || note.length > 2000) return { error: 'راجع بيانات المستحق ومرجع استحقاقه' };
   const actor = await requireUser();
   try {
-    await runOnce({ requestId: f(form,'requestId'), actorId: actor.id, action: 'EARNING_PROPOSE', payload: { kind,service,orderId,projectId,assignmentId,recipientId,basisRef,note,amountMinor:String(proposedMinor) }, execute: async tx => {
+      await runOnce({ requestId: f(form,'requestId'), actorId: actor.id, action: 'EARNING_PROPOSE', payload: { kind,service,orderId,projectId,assignmentId,cycleId,recipientId,basisRef,note,amountMinor:String(proposedMinor) }, execute: async tx => {
       if (actor.role !== 'OWNER') throw new EarningError('المالك فقط يسجل مقترح المستحق');
       await lock(tx,`EARNING_ORDER:${orderId}`);
       const order = await tx.customerOrder.findUnique({ where: { id: orderId }, include: { items: true } });
@@ -37,11 +37,18 @@ export async function proposeEarning(_: ActionState, form: FormData): Promise<Ac
       if (!recipient || recipient.role !== kind) throw new EarningError('المستفيد لا يطابق دور المستحق');
       let entitlementKey: string;
       if (kind === 'COMMUNICATION') {
-        if (projectId || assignmentId || proposedMinor !== fixedMinor) throw new EarningError('العمولة الكاملة مرتبطة بالاتفاق مرة واحدة، والتقسيم يحتاج تسوية معتمدة');
+        if (projectId || assignmentId || cycleId || proposedMinor !== fixedMinor) throw new EarningError('العمولة الكاملة مرتبطة بالاتفاق مرة واحدة، والتقسيم يحتاج تسوية معتمدة');
         if (await confirmedOrderPaidMinor(tx, orderId) !== order.totalMinor) throw new EarningError('العمولة المعلقة تحتاج تحصيل الاتفاق كاملًا؛ التحصيل الجزئي يحتاج قرارًا');
         entitlementKey = `COMM:ORDER:${orderId}`;
       } else {
-        if (service === 'SA_SUBSCRIPTION') throw new EarningError('أجر دورة الاشتراك يحتاج إغلاق الدورة وقبول جميع أعمالها قبل الاستحقاق');
+        if (service === 'SA_SUBSCRIPTION') {
+          if (projectId || assignmentId || !cycleId || proposedMinor !== fixedMinor) throw new EarningError('أجر الدورة الكاملة يحتاج دورة مغلقة وقيمة السياسة المعتمدة');
+          const closure = await tx.subscriptionCycleClosure.findUnique({ where: { cycleId }, include: { cycle: { include: { subscription: true } } } });
+          if (!closure || closure.cycle.status !== 'CLOSED' || closure.cycle.subscription.orderId !== orderId || closure.executorId !== recipientId || recipient.role !== 'EXECUTION')
+            throw new EarningError('الدورة غير مغلقة أو المنفذ لا يطابق اعتمادها');
+          entitlementKey = `EXEC:CYCLE:${cycleId}`;
+        } else {
+        if (cycleId) throw new EarningError('دورة الاشتراك لا ترتبط بأجر خدمة فردية');
         const project = await tx.project.findUnique({ where: { id: projectId } });
         const assignment = await tx.projectAssignment.findUnique({ where: { id: assignmentId } });
         if (!project || project.orderId !== orderId || project.orderItemId !== item.id || !project.completedAt || !assignment || assignment.projectId !== projectId || assignment.executorId !== recipientId || !assignment.acceptedAt) throw new EarningError('يلزم مشروع مكتمل وتكليف مقبول للمنفذ نفسه');
@@ -49,8 +56,9 @@ export async function proposeEarning(_: ActionState, form: FormData): Promise<Ac
         const prior = await tx.employeeEarning.aggregate({ where: { projectId, kind: 'EXECUTION' }, _sum: { amountMinor: true } });
         if ((prior._sum.amountMinor ?? 0n) + proposedMinor > fixedMinor) throw new EarningError('مجموع أجور المنفذين يتجاوز أجر العمل المعتمد');
         entitlementKey = `EXEC:ASSIGN:${assignmentId}`;
+        }
       }
-      const earning = await tx.employeeEarning.create({ data: { entitlementKey, kind: kind as 'COMMUNICATION'|'EXECUTION', recipientId, orderId, projectId: projectId || null, assignmentId: assignmentId || null, amountMinor: proposedMinor, policyCode: service, policyVersion: 1, basisRef, note: note || null, proposedById: actor.id } });
+      const earning = await tx.employeeEarning.create({ data: { entitlementKey, kind: kind as 'COMMUNICATION'|'EXECUTION', recipientId, orderId, projectId: projectId || null, assignmentId: assignmentId || null, subscriptionCycleId: cycleId || null, amountMinor: proposedMinor, policyCode: service, policyVersion: 1, basisRef, note: note || null, proposedById: actor.id } });
       await tx.auditLog.create({ data: { actorId: actor.id, action: 'EARNING_PROPOSED', subjectId: earning.id, detail: { entitlementKey, recipientId, orderId, projectId, assignmentId, amountMinor: String(proposedMinor), policyCode: service, basisRef } } });
       return { id: earning.id };
     } });
@@ -72,8 +80,13 @@ export async function approveEarning(_: ActionState, form: FormData): Promise<Ac
         const order = await tx.customerOrder.findUnique({ where: { id: earning.orderId } });
         if (!order || await confirmedOrderPaidMinor(tx, earning.orderId) !== order.totalMinor) throw new EarningError('لم يكتمل التحصيل بعد');
       } else {
-        const project = await tx.project.findUnique({ where: { id: earning.projectId ?? '' } });
-        if (!project?.completedAt || !await tx.approval.findFirst({ where: { projectId: project.id, kind: 'FINAL_DELIVERY' } })) throw new EarningError('العمل لم يُقبل نهائيًا');
+        if (earning.subscriptionCycleId) {
+          const closure = await tx.subscriptionCycleClosure.findUnique({ where: { cycleId: earning.subscriptionCycleId }, include: { cycle: true } });
+          if (!closure || closure.cycle.status !== 'CLOSED' || closure.executorId !== earning.recipientId) throw new EarningError('الدورة لم تُعتمد نهائيًا');
+        } else {
+          const project = await tx.project.findUnique({ where: { id: earning.projectId ?? '' } });
+          if (!project?.completedAt || !await tx.approval.findFirst({ where: { projectId: project.id, kind: 'FINAL_DELIVERY' } })) throw new EarningError('العمل لم يُقبل نهائيًا');
+        }
       }
       const cost = await account(tx, earning.kind === 'COMMUNICATION' ? 'COMMUNICATION_COST' : 'EXECUTION_COST', earning.kind === 'COMMUNICATION' ? 'عمولات مكتسبة' : 'أجور تنفيذ مكتسبة');
       const payable = await account(tx, 'EARNINGS_PAYABLE', 'مستحقات العاملين');

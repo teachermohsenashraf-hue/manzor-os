@@ -70,7 +70,7 @@ export async function confirmReceipt(_: ActionState, form: FormData): Promise<Ac
     } });
   } catch (error) { return failure(error); }
   refresh(orderId);
-  return { success: 'اعتمد التحصيل وسُجل قيد متوازن، والمبلغ ما زال دفعة عميل حتى قرار الاعتراف بالإيراد' };
+  return { success: 'تم اعتماد التحصيل وحفظ مرجع البنك، ولا يُعد المبلغ ربحًا متاحًا للتوزيع' };
 }
 
 export async function confirmFxReceipt(_: ActionState, form: FormData): Promise<ActionState> {

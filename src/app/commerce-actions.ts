@@ -71,7 +71,7 @@ export async function createSubscription(_:ActionState,form:FormData):Promise<Ac
     if(order.status!=='APPROVED'||order.marketCode!=='SA')throw new CommerceError('الاشتراك يحتاج طلبًا سعوديًا معتمدًا');
     if(await tx.subscription.findUnique({where:{orderId}}))throw new CommerceError('للطلب اشتراك بالفعل');
     const items=await tx.orderItem.findMany({where:{orderId},include:{service:{include:{components:{include:{child:true}}}}}});
-    if(items.length!==1||items[0].serviceKindSnapshot!=='SUBSCRIPTION'||items[0].quantity!==1)throw new CommerceError('الطلب يجب أن يحتوي اشتراكًا واحدًا بعناصره');
+    if(items.length!==1||items[0].serviceKindSnapshot!=='SUBSCRIPTION'||items[0].quantity!==1||items[0].currency!=='SAR'||items[0].unitMinor!==130000n||order.totalMinor!==130000n)throw new CommerceError('الطلب يجب أن يحتوي اشتراكًا سعوديًا واحدًا بسعر 1300 ريال وعناصره');
     const components=readComponents(items[0].componentSnapshot);
     if(components.length!==2||!components.some(c=>c.productionType==='VIDEO'&&c.quantity===3)||!components.some(c=>c.productionType==='POSTER'&&c.quantity===3))throw new CommerceError('الدورة السعودية المعتمدة هي ثلاثة فيديوهات وثلاثة بوسترات');
     if(renewalOfId){const old=await tx.subscription.findUnique({where:{id:renewalOfId},include:{order:true}});if(!old||old.order.clientId!==order.clientId)throw new CommerceError('الاشتراك السابق لا يخص العميل')}

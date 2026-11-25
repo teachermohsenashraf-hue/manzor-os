@@ -39,6 +39,8 @@ model User {
   decidedChanges OrderChange[] @relation("ChangeDecider")
   createdSubscriptions Subscription[]
   earnings EmployeeEarning[] @relation("EarningRecipient")
+  executedCycleClosures SubscriptionCycleClosure[] @relation("CycleClosureExecutor")
+  closedCycles SubscriptionCycleClosure[] @relation("CycleClosureActor")
   payouts EmployeePayout[] @relation("PayoutRecipient")
   @@index([role, active])
 }
@@ -233,6 +235,7 @@ model Project {
   cycleItemId String?
   cycleItem CycleItem? @relation(fields: [cycleItemId], references: [id], onDelete: Restrict)
   earnings EmployeeEarning[]
+  revenueRecognition RevenueRecognition?
   expenses Expense[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -340,6 +343,9 @@ model CustomerOrder {
   fxReceipts FxReceipt[]
   earnings EmployeeEarning[]
   developmentAllocations DevelopmentAllocation[]
+  revenueRecognitions RevenueRecognition[]
+  cancellationAssessment CancellationAssessment?
+  refundOrder RefundOrder?
   @@index([teamId, status, createdAt])
   @@index([clientId, createdAt])
 }
@@ -442,6 +448,8 @@ model JournalEntry {
   developmentFunding DevelopmentAllocation? @relation("DevelopmentFunding")
   expenseAccrual Expense? @relation("ExpenseAccrual")
   expensePayment Expense? @relation("ExpensePayment")
+  revenueRecognition RevenueRecognition?
+  refundOrder RefundOrder?
 }
 
 enum EarningKind {
@@ -485,6 +493,8 @@ model EmployeeEarning {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   payoutLines PayoutLine[]
+  subscriptionCycleId String? @unique
+  subscriptionCycle SubscriptionCycle? @relation(fields: [subscriptionCycleId], references: [id], onDelete: Restrict)
   @@index([recipientId, status, createdAt])
   @@index([orderId, kind])
   @@index([projectId, kind])
@@ -631,6 +641,67 @@ model FinancialRule {
   createdAt DateTime @default(now())
   @@unique([code, version])
 }
+model RevenueRecognition {
+  id String @id @default(cuid())
+  orderId String
+  order CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  projectId String @unique
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  currency String
+  amountMinor BigInt
+  basisRef String
+  evidence Json
+  recognizedAt DateTime
+  approvedById String
+  journalId String @unique
+  journal JournalEntry @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  @@index([orderId])
+  @@index([recognizedAt])
+}
+model CancellationAssessment {
+  id String @id @default(cuid())
+  orderId String @unique
+  order CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  currency String
+  paidMinor BigInt
+  workValueMinor BigInt
+  employeeDueMinor BigInt
+  documentedCostMinor BigInt
+  retainedMinor BigInt
+  returnFeeMinor BigInt
+  refundMinor BigInt
+  agreementRef String
+  workEvidenceRef String
+  employeeEvidenceRef String?
+  costEvidenceRef String?
+  feeEvidenceRef String?
+  reason String
+  assessedById String
+  createdAt DateTime @default(now())
+  refundOrder RefundOrder?
+}
+model RefundOrder {
+  id String @id @default(cuid())
+  orderId String @unique
+  order CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  assessmentId String @unique
+  assessment CancellationAssessment @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+  amountMinor BigInt
+  currency String
+  status String @default("APPROVED")
+  destinationRef String
+  decisionRef String
+  approvedById String
+  approvedAt DateTime @default(now())
+  transferRef String? @unique
+  executedAt DateTime?
+  bankConfirmationRef String? @unique
+  confirmedAt DateTime?
+  journalId String? @unique
+  journal JournalEntry? @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  @@index([status, approvedAt])
+}
 model OrderItem {
   id String @id @default(cuid())
   orderId String
@@ -755,7 +826,21 @@ model SubscriptionCycle {
   createdAt DateTime @default(now())
   items CycleItem[]
   projects Project[]
+  closure SubscriptionCycleClosure?
+  earnings EmployeeEarning[]
   @@unique([subscriptionId, number])
+}
+model SubscriptionCycleClosure {
+  id String @id @default(cuid())
+  cycleId String @unique
+  cycle SubscriptionCycle @relation(fields: [cycleId], references: [id], onDelete: Restrict)
+  executorId String
+  executor User @relation("CycleClosureExecutor", fields: [executorId], references: [id], onDelete: Restrict)
+  projectIds Json
+  evidence Json
+  closedById String
+  closedBy User @relation("CycleClosureActor", fields: [closedById], references: [id], onDelete: Restrict)
+  closedAt DateTime @default(now())
 }
 model CycleItem {
   id String @id @default(cuid())
@@ -849,6 +934,7 @@ model Deliverable {
   submittedById String
   submittedAt DateTime @default(now())
   deliveredAt DateTime?
+  attachments Attachment[]
   @@unique([projectId, version])
 }
 model QualityReview {
@@ -895,9 +981,14 @@ model Attachment {
   fileName String
   mimeType String
   sizeBytes Int
+  deliverableId String?
+  deliverable Deliverable? @relation(fields: [deliverableId], references: [id], onDelete: Restrict)
+  verifiedAt DateTime?
+  uploadExpiresAt DateTime?
   uploadedById String
   createdAt DateTime @default(now())
   @@index([projectId, kind])
+  @@index([projectId, kind, verifiedAt])
 }
 model MutationRequest {
   id String @id
