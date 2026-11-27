@@ -48,7 +48,8 @@ try {
   `);
   console.log(JSON.stringify(defaults));
   const { rows: callableDefiners } = await client.query(`
-    select p.proname as name, pg_get_function_identity_arguments(p.oid) as arguments
+    select p.proname as name, pg_get_function_identity_arguments(p.oid) as arguments,
+           pg_get_function_result(p.oid) as return_type
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace,
       lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
     where n.nspname = 'public' and p.prosecdef and a.grantee = 0

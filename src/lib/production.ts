@@ -19,9 +19,15 @@ export function canSeeProject(role: Role, userId: string, team: { communicatorId
 export function canMoveStage(role: Role, from: ProjectStage, to: ProjectStage) {
   if (!transitions[from].includes(to)) return false;
   if (role === 'OWNER') return true;
-  if (role === 'COMMUNICATION') return ['TREATMENT','WAITING_APPROVAL','READY','REVISIONS','READY_DELIVERY','DELIVERED','COMPLETED'].includes(to);
-  if (role === 'EXECUTION') return ['WAITING_APPROVAL','IN_PROGRESS','INTERNAL_REVIEW','CLIENT_PREVIEW','READY_DELIVERY'].includes(to);
+  if (role === 'COMMUNICATION') return ['TREATMENT','WAITING_APPROVAL','READY','REVISIONS','READY_DELIVERY'].includes(to);
+  if (role === 'EXECUTION') return ['WAITING_APPROVAL','IN_PROGRESS','INTERNAL_REVIEW'].includes(to);
   return false;
+}
+export function individualPrepaymentCovered(totalMinor: bigint, collectedMinor: bigint) {
+  return totalMinor > 0n && collectedMinor >= (totalMinor + 1n) / 2n;
+}
+export function finalPaymentCovered(totalMinor: bigint, collectedMinor: bigint) {
+  return totalMinor > 0n && collectedMinor >= totalMinor;
 }
 export function targetHours(service: string, urgent = false): [number, number] {
   if (urgent) return [48, 72];

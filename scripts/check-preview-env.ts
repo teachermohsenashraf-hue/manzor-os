@@ -4,5 +4,5 @@ if (process.argv.includes('--required') && !isPreviewEnvironment(process.env))
   throw new Error('يلزم تعريف MANZOOR_ENV=preview لفحص بيئة المعاينة');
 if (isPreviewEnvironment(process.env)) {
   assertPreviewIsolation(process.env);
-  console.log('تم التحقق من عزل قاعدة المعاينة وتخزينها وعنوانها');
+  console.log('تم التحقق من اتصال المعاينة المحدود وعنوانها دون مفتاح تخزين');
 }

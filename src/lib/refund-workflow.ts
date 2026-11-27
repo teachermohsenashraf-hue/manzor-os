@@ -26,12 +26,15 @@ export async function approveRefundTx(tx: Tx, orderId: string, actorId: string, 
       assessment.retainedMinor > assessment.workValueMinor+assessment.employeeDueMinor+assessment.documentedCostMinor)
     throw new RefundError('تقييم الإلغاء لا يغطي الإيراد المسجل أو حقوق المنفذين والتكاليف');
   if (assessment.workValueMinor > 0n) {
-    const projects = await tx.project.findMany({ where: { orderId }, include: { approvals: true, qualityReviews: true, attachments: true } });
+    const projects = await tx.project.findMany({ where: { orderId }, include: { approvals: true, qualityReviews: true, attachments: true, events: true } });
     const accepted = projects.some(project => project.approvals.some(approval =>
       ['PREVIEW','FINAL_DELIVERY'].includes(approval.kind) && approval.deliverableId &&
       project.qualityReviews.some(review => review.deliverableId === approval.deliverableId && review.passed) &&
-      project.attachments.some(file => file.deliverableId === approval.deliverableId && file.verifiedAt)));
-    if (!accepted) throw new RefundError('العمل المحتفظ بقيمته يحتاج قبولًا وجودة وملفًا موثقًا');
+      (project.attachments.some(file => file.deliverableId === approval.deliverableId && file.verifiedAt) ||
+        ['OwnerPreviewApproved','ProtectedPreviewSentToClient'].every(kind => project.events.some(event =>
+          event.kind === kind && typeof event.detail === 'object' && event.detail !== null &&
+          !Array.isArray(event.detail) && event.detail.deliverableId === approval.deliverableId)))));
+    if (!accepted) throw new RefundError('العمل المحتفظ بقيمته يحتاج قبول العميل واجتياز الجودة ودليل المعاينة');
   }
   if (assessment.employeeDueMinor > 0n) {
     const earned = await tx.employeeEarning.aggregate({ where: { orderId, kind: 'EXECUTION', status: { in: ['EARNED','PAYABLE','PAID'] } }, _sum: { amountMinor: true } });

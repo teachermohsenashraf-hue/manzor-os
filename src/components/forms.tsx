@@ -1,6 +1,6 @@
 'use client';
 import { useActionState } from 'react';
-import { login, changePassword, createUser, updateUser, resetPassword, type ActionState } from '@/app/actions';
+import { login, changePassword, createUser, updateUser, resetPassword, updateOwnName, type ActionState } from '@/app/actions';
 function Feedback({ state }: { state: ActionState }) {
   return <>{state.error && <p className="message error" role="alert">{state.error}</p>}{state.success && <p className="message success" role="status">{state.success}</p>}</>;
 }
@@ -11,6 +11,10 @@ export function LoginForm() {
 export function PasswordForm() {
   const [state, action, pending] = useActionState(changePassword, {});
   return <form action={action} className="stack"><label>كلمة المرور الحالية<input type="password" name="current" autoComplete="current-password" required maxLength={128}/></label><label>كلمة المرور الجديدة<input type="password" name="password" autoComplete="new-password" dir="ltr" required minLength={8} maxLength={128} pattern="[A-Za-z0-9]{8,128}"/><small>8 أحرف أو أرقام إنجليزية على الأقل</small></label><label>تأكيد كلمة المرور<input type="password" name="confirm" autoComplete="new-password" dir="ltr" required minLength={8} maxLength={128} pattern="[A-Za-z0-9]{8,128}"/></label><Feedback state={state}/><button disabled={pending}>{pending ? 'جارٍ الحفظ' : 'حفظ ومتابعة'}</button></form>;
+}
+export function OwnNameForm({ name }: { name: string }) {
+  const [state, action, pending] = useActionState(updateOwnName, {});
+  return <form action={action} className="stack"><label>الاسم المعروض<input name="name" defaultValue={name} autoComplete="name" required minLength={2} maxLength={120}/></label><Feedback state={state}/><button disabled={pending}>{pending ? 'جارٍ الحفظ' : 'حفظ الاسم'}</button></form>;
 }
 function Roles({ value = 'COMMUNICATION' }: { value?: string }) {
   return <label>الدور<select name="role" defaultValue={value}><option value="COMMUNICATION">مسؤول التواصل</option><option value="EXECUTION">مسؤول التنفيذ</option><option value="MANAGER">مشرف صلاحيات محدودة</option></select></label>;

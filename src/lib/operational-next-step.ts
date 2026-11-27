@@ -4,9 +4,16 @@ type OrderProgress = {
   status: OrderStatus;
   totalMinor: bigint;
   items: { id: string; serviceKindSnapshot?: string }[];
-  subscription: { status: SubscriptionStatus } | null;
+  subscription: { status: SubscriptionStatus; cycles?: { status: string; items: { plannedQuantity: number; assignedQuantity: number }[] }[] } | null;
   projects: { id: string; stage: ProjectStage }[];
 };
+
+export function remainingSubscriptionWork(order: OrderProgress): number {
+  if (order.subscription?.status !== 'ACTIVE') return 0;
+  return (order.subscription.cycles ?? []).filter(cycle => cycle.status === 'ACTIVE')
+    .flatMap(cycle => cycle.items)
+    .reduce((remaining, item) => remaining + Math.max(0, item.plannedQuantity - item.assignedQuantity), 0);
+}
 
 export function nextOrderStep(order: OrderProgress, collected: bigint, role: Role): string {
   if (order.status === 'CANCELLED') return 'الطلب ملغى، راجع التسوية عند الحاجة';
@@ -17,7 +24,12 @@ export function nextOrderStep(order: OrderProgress, collected: bigint, role: Rol
   if (order.items.some(item => item.serviceKindSnapshot === 'SUBSCRIPTION') && !order.subscription)
     return role === 'OWNER' ? 'أنشئ الدورة الشهرية للباقة المدفوعة' : 'بانتظار إعداد الدورة الشهرية';
   if (order.subscription?.status === 'PENDING') return role === 'OWNER' ? 'فعّل الاشتراك المدفوع' : 'بانتظار تفعيل الاشتراك';
+  const remaining = remainingSubscriptionWork(order);
+  if (remaining) return `أنشئ تكليفات الأعمال المتبقية وعددها ${remaining}`;
   if (!order.projects.length) return 'أنشئ تكليف الإنتاج';
   if (order.projects.some(project => project.stage !== 'COMPLETED')) return 'تابع التنفيذ والمراجعة والتسليم';
-  return 'اكتمل التسليم، راجع مستحقات الفريق';
+  if (order.subscription?.cycles?.some(cycle => cycle.status === 'ACTIVE'))
+    return role === 'OWNER' ? 'راجع الأعمال الستة وأغلق دورة الاشتراك' : 'بانتظار إغلاق دورة الاشتراك من المالك';
+  if (order.subscription) return 'اكتمل تسليم أعمال الاشتراك وإغلاق دورته';
+  return role === 'OWNER' ? 'اكتمل التسليم، راجع مستحقات الفريق' : 'اكتمل التسليم';
 }

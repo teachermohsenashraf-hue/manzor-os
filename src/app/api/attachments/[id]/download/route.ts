@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { currentUser } from '@/lib/auth';
 import { canAccessFile, privateStorage } from '@/lib/private-storage';
+import { localTestStorageEnabled, readLocalTestFile } from '@/lib/local-test-storage';
 
 export const runtime = 'nodejs';
 export async function GET(_request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -19,6 +20,14 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
       !['CLIENT_PREVIEW','REVISIONS','READY_DELIVERY','DELIVERED'].includes(file.project.stage) && actor.role === 'COMMUNICATION')
     return new NextResponse('المعاينة لم تعتمد بعد', { status: 403 });
   try {
+    if (localTestStorageEnabled()) {
+      const bytes = await readLocalTestFile(file.storageKey);
+      return new NextResponse(new Uint8Array(bytes), { headers: {
+        'Content-Type': file.mimeType,
+        'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(file.fileName)}`,
+        'Cache-Control': 'no-store',
+      } });
+    }
     const storage = await privateStorage();
     const { data, error } = await storage.createSignedUrl(file.storageKey, 60, { download: file.fileName });
     if (error || !data) return new NextResponse('تعذر إنشاء رابط خاص', { status: 503 });

@@ -6,13 +6,14 @@ import { Prisma } from '@/generated/prisma/client';
 import { db } from '@/lib/db';
 import { cookieName, createSession, digest, requirePermission, requireUser } from '@/lib/auth';
 import { hashPassword, verifyPassword } from '@/lib/password';
-import { passwordSchema, userSchema, usernameSchema } from '@/lib/validation';
+import { displayNameSchema, passwordSchema, userSchema, usernameSchema } from '@/lib/validation';
 import { consumeLoginThrottle } from '@/lib/login-throttle';
+import { appOrigin } from '@/lib/preview-isolation';
 
 export type ActionState = { error?: string; success?: string };
 async function verifyOrigin() {
   const h = await headers();
-  const expected = process.env.APP_ORIGIN;
+  const expected = appOrigin(process.env);
   if (!expected || h.get('origin') !== new URL(expected).origin) throw new Error('مصدر الطلب غير مسموح');
 }
 export async function login(_: ActionState, form: FormData): Promise<ActionState> {
@@ -24,7 +25,15 @@ export async function login(_: ActionState, form: FormData): Promise<ActionState
   const key = digest(parsed.data);
   let allowed: boolean;
   try { allowed = await consumeLoginThrottle(key); }
-  catch { return { error: 'تعذر الاتصال بقاعدة البيانات راجع إعداد الخادم' }; }
+  catch (error) {
+    const failure = error as { name?: string; code?: string; meta?: { code?: string } };
+    console.error('Login throttle database failure', {
+      name: failure.name,
+      code: failure.code,
+      databaseCode: failure.meta?.code,
+    });
+    return { error: 'تعذر الاتصال بقاعدة البيانات راجع إعداد الخادم' };
+  }
   if (!allowed) return { error: 'محاولات كثيرة حاول بعد 15 دقيقة' };
   const user = await db.user.findUnique({ where: { username: parsed.data } });
   const dummy = 'scrypt-v1:' + '0'.repeat(64) + ':' + '0'.repeat(128);
@@ -59,6 +68,21 @@ export async function changePassword(_: ActionState, form: FormData): Promise<Ac
   });
   await createSession(user.id);
   redirect('/dashboard');
+}
+export async function updateOwnName(_: ActionState, form: FormData): Promise<ActionState> {
+  await verifyOrigin();
+  const user = await requireUser();
+  if (!['OWNER', 'MANAGER'].includes(user.role)) return { error: 'تعديل الاسم متاح للمالك والمدير فقط' };
+  const parsed = displayNameSchema.safeParse(form.get('name'));
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  if (parsed.data === user.name) return { success: 'الاسم المعروض كما هو' };
+  await db.$transaction(async tx => {
+    await tx.user.update({ where: { id: user.id }, data: { name: parsed.data } });
+    await tx.auditLog.create({ data: { actorId: user.id, action: 'OWN_NAME_CHANGED', subjectId: user.id, detail: { before: user.name, after: parsed.data } } });
+  });
+  revalidatePath('/dashboard');
+  revalidatePath('/change-password');
+  return { success: 'حُفظ الاسم المعروض' };
 }
 export async function createUser(_: ActionState, form: FormData): Promise<ActionState> {
   await verifyOrigin();

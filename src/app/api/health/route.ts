@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { appOrigin } from '@/lib/preview-isolation';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,15 +11,18 @@ export async function GET(request: NextRequest) {
       const { db } = await import('@/lib/db');
       await db.$queryRaw`SELECT 1`;
       database = 'ok';
-    } catch {
+    } catch (error) {
+      const failure = error as { name?: string; code?: string; meta?: { code?: string } };
+      console.error('Health database check failed', { name: failure.name, code: failure.code, databaseCode: failure.meta?.code });
       database = 'unavailable';
     }
   }
 
-  let origin: 'ok' | 'missing' | 'mismatch' = process.env.APP_ORIGIN ? 'mismatch' : 'missing';
-  if (process.env.APP_ORIGIN) {
+  const expectedOrigin = appOrigin(process.env);
+  let origin: 'ok' | 'missing' | 'mismatch' = expectedOrigin ? 'mismatch' : 'missing';
+  if (expectedOrigin) {
     try {
-      if (new URL(process.env.APP_ORIGIN).origin === new URL(request.url).origin) origin = 'ok';
+      if (new URL(expectedOrigin).origin === new URL(request.url).origin) origin = 'ok';
     } catch {
       origin = 'mismatch';
     }

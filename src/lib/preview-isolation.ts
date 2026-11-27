@@ -7,14 +7,22 @@ export function isPreviewEnvironment(env: PreviewEnvironment) {
   return env.VERCEL_ENV === 'preview' || env.MANZOOR_ENV === 'preview';
 }
 
+export function appOrigin(env: PreviewEnvironment) {
+  if (env.MANZOOR_ENV === 'preview' && env.VERCEL_ENV === 'preview' && env.VERCEL_URL)
+    return `https://${env.VERCEL_URL}`;
+  return env.APP_ORIGIN;
+}
+
 export function assertPreviewIsolation(env: PreviewEnvironment) {
   if (!isPreviewEnvironment(env)) return;
   if (env.MANZOOR_ENV !== 'preview') throw new Error('بيئة المعاينة غير مضبوطة');
 
   const supabase = /^https:\/\/([a-z0-9-]+)\.supabase\.co\/?$/.exec(env.SUPABASE_URL ?? '');
   const ref = supabase?.[1];
-  if (ref !== productionRef || env.VERCEL_ENV === 'preview' && !env.SUPABASE_SECRET_KEY)
-    throw new Error('المعاينة تتطلب مشروع Supabase الحالي مع إعداد تخزين خاص بالاختبار');
+  if (ref !== productionRef)
+    throw new Error('المعاينة تتطلب مشروع Supabase المعتمد');
+  if (env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY)
+    throw new Error('المعاينة التشغيلية لا تستخدم مفتاح تخزين خاص');
 
   for (const name of ['DATABASE_URL', 'DIRECT_URL'] as const) {
     let url: URL;
@@ -29,9 +37,15 @@ export function assertPreviewIsolation(env: PreviewEnvironment) {
   }
 
   let origin: URL;
-  try { origin = new URL(env.APP_ORIGIN ?? ''); }
+  let configuredOrigin: URL | undefined;
+  try {
+    origin = new URL(appOrigin(env) ?? '');
+    configuredOrigin = env.APP_ORIGIN ? new URL(env.APP_ORIGIN) : undefined;
+  }
   catch { throw new Error('APP_ORIGIN للمعاينة غير صالح'); }
+  if (configuredOrigin && env.VERCEL_ENV === 'preview' && configuredOrigin.origin !== origin.origin)
+    throw new Error('APP_ORIGIN لا يطابق عنوان نشر المعاينة');
   if (origin.origin === 'https://manzor-os.vercel.app' ||
-      (env.VERCEL_ENV === 'preview' && origin.protocol !== 'https:'))
+      (env.VERCEL_ENV && origin.protocol !== 'https:'))
     throw new Error('APP_ORIGIN للمعاينة يجب أن يكون عنوانها المستقل');
 }

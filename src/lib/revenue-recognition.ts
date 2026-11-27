@@ -15,7 +15,7 @@ export async function recognizeIndividualRevenue(tx: Tx, projectId: string, acto
   if (rule?.status !== 'APPROVED') throw new RevenueRecognitionError('سياسة إيراد الخدمات الفردية لم تُعتمد');
   const order = await tx.customerOrder.findUnique({ where: { id: project.orderId }, include: {
     items: true, changes: { where: { status: 'APPROVED' } }, revenueRecognitions: true,
-    projects: { where: { id: projectId }, include: { deliverables: true, approvals: true, qualityReviews: true, attachments: true } },
+    projects: { where: { id: projectId }, include: { deliverables: true, approvals: true, qualityReviews: true, attachments: true, events: true } },
   } });
   if (!order || order.status !== 'APPROVED' || order.totalMinor <= 0n || order.changes.length)
     throw new RevenueRecognitionError('الطلب غير معتمد أو تغير نطاقه ويحتاج تسوية منفصلة');
@@ -30,9 +30,13 @@ export async function recognizeIndividualRevenue(tx: Tx, projectId: string, acto
     .sort((a,b) => b.approvedAt.getTime()-a.approvedAt.getTime())[0];
   const quality = work.qualityReviews.filter(row => row.deliverableId === latest?.id)
     .sort((a,b) => b.createdAt.getTime()-a.createdAt.getTime())[0];
-  if (!latest?.deliveredAt || !approval || !quality?.passed ||
-      !work.attachments.some(file => file.kind === 'FINAL' && file.deliverableId === latest.id && file.verifiedAt))
-    throw new RevenueRecognitionError('اعتماد التسليم والجودة والملف النهائي الموثق مطلوبة');
+  const historicalFile = work.attachments.some(file => file.kind === 'FINAL' && file.deliverableId === latest?.id && file.verifiedAt);
+  const hasEvent = (kind: string) => work.events.some(event => event.kind === kind &&
+    typeof event.detail === 'object' && event.detail !== null && !Array.isArray(event.detail) && event.detail.deliverableId === latest?.id);
+  const localDelivery = ['OwnerPreviewApproved','ProtectedPreviewSentToClient','FinalSentToClient','ClientReceiptConfirmed'].every(hasEvent) &&
+    work.approvals.some(row => row.kind === 'PREVIEW' && row.deliverableId === latest?.id);
+  if (!latest?.deliveredAt || !approval || !quality?.passed || !(historicalFile || localDelivery))
+    throw new RevenueRecognitionError('اعتماد المالك والعميل والتسليم وتأكيد الاستلام وفحص الجودة مطلوبة');
   const recognizedMinor = order.revenueRecognitions.reduce((sum,row) => sum+row.amountMinor,0n);
   const paidMinor = await confirmedOrderPaidMinor(tx, order.id);
   if (recognizedMinor + item.unitMinor > paidMinor || recognizedMinor + item.unitMinor > order.totalMinor)

@@ -23,8 +23,9 @@ export function cycleRemaining(planned:number,assigned:number){return Math.max(0
 export function formatMinor(amount:bigint,currency:string){
   const digits=new Intl.NumberFormat('en',{style:'currency',currency}).resolvedOptions().maximumFractionDigits??2;
   const factor=10n**BigInt(digits),sign=amount<0n?'-':'' ,value=amount<0n?-amount:amount;
-  const whole=new Intl.NumberFormat('ar-EG').format(value/factor);
-  return `${sign}${whole}${digits?'.'+(value%factor).toString().padStart(digits,'0'):''} ${currency}`;
+  const whole=new Intl.NumberFormat('en-US').format(value/factor);
+  const fraction=digits?(value%factor).toString().padStart(digits,'0').replace(/0+$/,''):'';
+  return `${sign}${whole}${fraction?'.'+fraction:''} ${currency}`;
 }
 export type ComponentSnapshot={serviceId:string;quantity:number;productionType:string;name:string};
 export function readComponents(value:unknown):ComponentSnapshot[]{

@@ -15,3 +15,5 @@ src/app/fonts/*.woff*
 src/app/fonts/*.ttf
 src/app/fonts/*.otf
 qa/*.jpg
+qa/ux-2026-11-26/
+.local-storage/

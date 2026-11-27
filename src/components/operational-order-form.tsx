@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useActionState, useState } from 'react';
 import { createOperationalOrder } from '@/app/operational-actions';
 import { formatMinor } from '@/lib/commerce';
@@ -8,7 +9,7 @@ type Client = { id: string; name: string };
 type Team = { id: string; name: string };
 type Offer = { id: string; name: string; kind: string; currency: string; amountMinor: bigint; marketCode: string };
 
-export function OperationalOrderForm({ clients, teams, offers }: { clients: Client[]; teams: Team[]; offers: Offer[] }) {
+export function OperationalOrderForm({ clients, teams, offers, canManageServices }: { clients: Client[]; teams: Team[]; offers: Offer[]; canManageServices: boolean }) {
   const [mode, setMode] = useState<'existing' | 'new'>(clients.length ? 'existing' : 'new');
   const [state, submit, pending] = useActionState(createOperationalOrder, {});
   return <form action={submit} className="stack production-form" onSubmit={event => {
@@ -39,6 +40,7 @@ export function OperationalOrderForm({ clients, teams, offers }: { clients: Clie
     </div></details>
     {state.error && <p role="alert" className="message error">{state.error}</p>}
     <button disabled={pending || !offers.length || !teams.length}>{pending ? 'جار الحفظ' : 'حفظ وإرسال الطلب للمراجعة'}</button>
-    {!offers.length && <p className="notice">لا توجد خدمة بسعر ساري، أضفها إلى الكتالوج أولًا</p>}
+    {!teams.length && <p className="notice">لا يوجد فريق متاح لحسابك، اطلب من المالك ربطك بفريق قبل تسجيل الطلب</p>}
+    {!offers.length && <p className="notice">لا توجد خدمة بسعر ساري {canManageServices ? <Link href="/services">أضف خدمة وسعرها</Link> : 'اطلب من المالك إضافة الخدمة وسعرها'}</p>}
   </form>;
 }

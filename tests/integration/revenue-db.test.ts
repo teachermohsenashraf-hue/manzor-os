@@ -33,10 +33,12 @@ test('individual revenue needs accepted delivery and collection, then posts once
     await tx.project.update({ where: { id: project.id }, data: { stage: 'COMPLETED', completedAt: now, deliveredAt: now } });
     const deliverable = await tx.deliverable.create({ data: { projectId: project.id, version: 1, title: 'poster final', submittedById: executor.id, deliveredAt: now } });
     await tx.qualityReview.create({ data: { projectId: project.id, deliverableId: deliverable.id, reviewerId: owner.id, checklist: ['poster'], passed: true } });
-    await tx.approval.create({ data: { projectId: project.id, kind: 'FINAL_DELIVERY', deliverableId: deliverable.id, approvedById: owner.id, approvedAt: now } });
-    await tx.attachment.create({ data: { projectId: project.id, deliverableId: deliverable.id, kind: 'FINAL',
-      storageKey: `test/${tag}/final.png`, fileName: 'final.png', mimeType: 'image/png', sizeBytes: 100,
-      verifiedAt: now, uploadedById: executor.id } });
+    await tx.approval.create({ data: { projectId: project.id, kind: 'PREVIEW', deliverableId: deliverable.id, approvedById: comm.id, approvedAt: now } });
+    await tx.approval.create({ data: { projectId: project.id, kind: 'FINAL_DELIVERY', deliverableId: deliverable.id, approvedById: comm.id, approvedAt: now } });
+    for (const [kind, actorId] of [
+      ['OwnerPreviewApproved', owner.id], ['ProtectedPreviewSentToClient', comm.id],
+      ['FinalSentToClient', comm.id], ['ClientReceiptConfirmed', comm.id],
+    ]) await tx.productionEvent.create({ data: { projectId: project.id, kind, actorId, detail: { deliverableId: deliverable.id, simulated: true } } });
     await assert.rejects(recognizeIndividualRevenue(tx, project.id, owner.id, 'test-approval'), RevenueRecognitionError);
     const cash = await tx.ledgerAccount.upsert({ where: { code_currency: { code: 'CASH', currency: 'EGP' } },
       create: { code: 'CASH', currency: 'EGP', name: 'cash' }, update: {} });

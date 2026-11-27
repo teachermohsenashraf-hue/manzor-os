@@ -9,7 +9,10 @@ test('prices select the effective market version without changing historical amo
   assert.equal(activePrice([old,next],new Date('2026-07-01T00:00:00Z'))?.amount,12000n);
   assert.equal(parseMinor('00100'),null);
   assert.equal(parseMinor('10000'),10000n);
-  assert.equal(formatMinor(10000n,'EGP'),`${new Intl.NumberFormat('ar-EG').format(100n)}.00 EGP`);
+  assert.equal(formatMinor(10000n,'EGP'),'100 EGP');
+  assert.equal(formatMinor(123456789n,'EGP'),'1,234,567.89 EGP');
+  assert.equal(formatMinor(10050n,'EGP'),'100.5 EGP');
+  assert.equal(formatMinor(10005n,'EGP'),'100.05 EGP');
 });
 test('only owner approves commercial orders and execution cannot read them',()=>{
   assert.equal(canChangeOrder('COMMUNICATION','DRAFT','PROPOSED'),true);
