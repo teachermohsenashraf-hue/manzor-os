@@ -58,7 +58,8 @@ try {
         const response = await page.goto(`${base}/${route}`, { waitUntil: 'domcontentloaded' });
         if (response?.status() !== 200) throw new Error(`${role} /${route} HTTP ${response?.status()}`);
         await page.locator('main h1').first().waitFor();
-        await page.locator('main .card').first().waitFor();
+        try { await page.locator('main .card').first().waitFor({ timeout: 10_000 }); }
+        catch (error) { console.log(`Page content ${role} /${route}:`, (await page.locator('body').innerText()).slice(0, 500)); throw error; }
         await page.screenshot({ path: join(output, `${role.toLowerCase()}-${route}-${width}.png`), animations: 'disabled' });
         const metrics = await page.evaluate(() => ({ bodyWidth: document.documentElement.scrollWidth, viewportWidth: innerWidth, firstCardY: document.querySelector('main .card')?.getBoundingClientRect().y ?? null }));
         console.log(`${phase} ${role} ${route} ${width}: ${JSON.stringify(metrics)}`);
