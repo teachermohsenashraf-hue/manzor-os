@@ -8,7 +8,7 @@ import type { Role } from '@/generated/prisma/client';
 
 type Step = { path: string; target: string; title: string; text: string };
 const start: Step = { path: '/dashboard', target: 'start-order', title: 'ابدأ بعميل وطلب', text: 'سجل العميل والطلب من مسار واحد، ثم تابع حالة الطلب' };
-const form: Step = { path: '/orders', target: 'order-create', title: 'بيانات الطلب', text: 'أدخل البيانات الأساسية أولًا، وافتح التفاصيل الإضافية عند الحاجة' };
+const form: Step = { path: '/orders', target: 'order-create', title: 'سجل العميل والطلب', text: 'ابدأ بالعميل والخدمة ووصف المطلوب، والحقول الإضافية داخل قسم منفصل عند الحاجة' };
 const list: Step = { path: '/orders', target: 'orders-list', title: 'تابع الخطوة التالية', text: 'كل طلب يعرض حالته وما يحتاجه بعد التسجيل' };
 const projects: Step = { path: '/projects', target: 'project-list', title: 'تابع الأعمال', text: 'افتح العمل لمعرفة حالته والإجراء المطلوب من دورك' };
 const roleSteps: Partial<Record<Role, Step[]>> = {

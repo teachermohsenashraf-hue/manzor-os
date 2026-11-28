@@ -12,7 +12,7 @@ type Offer = { id: string; name: string; kind: string; currency: string; amountM
 export function OperationalOrderForm({ clients, teams, offers, canManageServices }: { clients: Client[]; teams: Team[]; offers: Offer[]; canManageServices: boolean }) {
   const [mode, setMode] = useState<'existing' | 'new'>(clients.length ? 'existing' : 'new');
   const [state, submit, pending] = useActionState(createOperationalOrder, {});
-  return <form action={submit} className="stack production-form" onSubmit={event => {
+  return <form action={submit} className="stack form-grid production-form" onSubmit={event => {
     const key = event.currentTarget.elements.namedItem('requestId') as HTMLInputElement;
     key.value = crypto.randomUUID();
   }}>
@@ -30,8 +30,8 @@ export function OperationalOrderForm({ clients, teams, offers, canManageServices
         <label className="check"><input type="checkbox" name="accepted" value="yes" required />وافق العميل على الطلب وتحويله إلى عميل فعلي</label>
       </>}
     </fieldset>
-    <label>الخدمة<select name="priceId" required defaultValue=""><option value="">اختر الخدمة</option>{offers.map(offer => <option key={offer.id} value={offer.id}>{offer.name} · {offer.marketCode} · {formatMinor(offer.amountMinor, offer.currency)}{offer.kind === 'SUBSCRIPTION' ? ' · شهريًا 3 فيديوهات و3 بوسترات' : ''}</option>)}</select></label>
-    <label>وصف المطلوب<textarea name="scope" rows={3} required placeholder="ما الذي طلبه العميل؟" /></label>
+    <label className="form-span">الخدمة<select name="priceId" required defaultValue=""><option value="">اختر الخدمة</option>{offers.map(offer => <option key={offer.id} value={offer.id}>{offer.name} · {offer.marketCode} · {formatMinor(offer.amountMinor, offer.currency)}{offer.kind === 'SUBSCRIPTION' ? ' · شهريًا 3 فيديوهات و3 بوسترات' : ''}</option>)}</select></label>
+    <label className="form-span">وصف المطلوب<textarea name="scope" rows={3} required placeholder="ما الذي طلبه العميل؟" /></label>
     <details><summary>تفاصيل إضافية عند الحاجة</summary><div className="stack">
       <label>اسم مخصص للطلب<input name="title" /></label>
       <label>المتطلبات المتوفرة<textarea name="requirements" rows={2} placeholder="يمكن استكمالها قبل بدء الإنتاج" /></label>
